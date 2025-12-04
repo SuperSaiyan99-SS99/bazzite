@@ -1,5 +1,3 @@
-%global _default_patch_fuzz 2
-
 %if 0%{?fedora} || 0%{?rhel} <= 8
 %bcond_without deprecated
 %else
@@ -7,14 +5,15 @@
 %endif
 
 Name:    bluez
-Version: 5.84
+Version: 5.81
 Release: 2%{?dist}.bazzite.{{{ git_dir_version }}}
 Summary: Bluetooth utilities
 License: GPL-2.0-or-later
 URL:     http://www.bluez.org/
 
 Source0: https://www.kernel.org/pub/linux/bluetooth/%{name}-%{version}.tar.xz
-Patch0: 0001-media-fix-pac_config_cb-error-code-return.patch
+
+Patch1:  bluez-5.81-fixes.patch
 
 # Valve
 Patch10: 0001-valve-bluetooth-config.patch
@@ -79,7 +78,7 @@ Obsoletes: bluez < 5.55-2
 
 %description deprecated
 Bluetooth applications that have bee deprecated by upstream. They have been
-replaced by functionality in the core bluetoothctl and will eventually
+replaced by funcationality in the core bluetoothctl and will eventually
 be dropped by upstream. Utilities include:
 	- ciptool
 	- gatttool
@@ -240,7 +239,7 @@ install emulator/btvirt ${RPM_BUILD_ROOT}/%{_libexecdir}/bluetooth/
 %files
 %license COPYING
 %doc AUTHORS ChangeLog
-# bluetooth.service expects configuration directory to be read only
+# bluetooth.service expects configuraton directory to be read only
 # https://github.com/bluez/bluez/issues/329#issuecomment-1102459104
 %attr(0555, root, root) %dir %{_sysconfdir}/bluetooth
 %config(noreplace) %{_sysconfdir}/bluetooth/main.conf
@@ -308,9 +307,7 @@ install emulator/btvirt ${RPM_BUILD_ROOT}/%{_libexecdir}/bluetooth/
 %{_mandir}/man1/rctest.1.*
 %{_mandir}/man5/org.bluez.*.5.*
 %{_mandir}/man7/hci.7.*
-%{_mandir}/man7/iso.7.*
 %{_mandir}/man7/l2cap.7.*
-%{_mandir}/man7/mgmt.7.*
 %{_mandir}/man7/rfcomm.7.*
 %{_mandir}/man7/sco.7.*
 %{_libdir}/libbluetooth.so
@@ -346,25 +343,6 @@ install emulator/btvirt ${RPM_BUILD_ROOT}/%{_libexecdir}/bluetooth/
 %{_userunitdir}/obex.service
 
 %changelog
-* Wed Sep 24 2025 Bastien Nocera <bnocera@redhat.com> - 5.84-2
-+ bluez-5.84-2
-- Fix Bluetooth LE audio
-
-* Fri Sep 19 2025 Bastien Nocera <bnocera@redhat.com> - 5.84-1
-- Update to 5.84
-
-* Wed Jul 23 2025 Fedora Release Engineering <releng@fedoraproject.org> - 5.83-3
-- Rebuilt for https://fedoraproject.org/wiki/Fedora_43_Mass_Rebuild
-
-* Wed Jul 09 2025 Peter Robinson <pbrobinson@fedoraproject.org> - 5.83-2
-- Fix for single commands without BT shell
-
-* Mon Jun 02 2025 Bastien Nocera <bnocera@redhat.com> - 5.83-1
-- Update to 5.83
-
-* Wed Apr 02 2025 Peter Robinson <pbrobinson@fedoraproject.org> - 5.82-1
-- Update to 5.82
-
 * Wed Apr 02 2025 Peter Robinson <pbrobinson@fedoraproject.org> - 5.81-2
 - Upstream patches to fix broken 5.81
 

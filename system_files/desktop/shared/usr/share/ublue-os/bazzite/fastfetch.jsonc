@@ -67,8 +67,7 @@
         },
         {
             "type": "disk",
-            "key": " ",
-            "hideFS": "overlay"
+            "key": " "
         },
         {
             "type": "display",

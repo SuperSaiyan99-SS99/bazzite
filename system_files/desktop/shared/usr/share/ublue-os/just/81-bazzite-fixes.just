@@ -2,22 +2,19 @@
 
 alias patch-gmod := fix-gmod
 
-# Patch GMod's 64-bit beta to work properly on Linux (https://github.com/solsticegamestudios/GModPatchTool)
-[group("gaming")]
+# Patch GMod's 64-bit beta to work properly on Linux (https://github.com/solsticegamestudios/GModCEFCodecFix)
 fix-gmod:
     #!/usr/bin/bash
     mkdir -p /tmp/patch-gmod
     wget \
-      $(curl -s https://api.github.com/repos/solsticegamestudios/GModPatchTool/releases/latest | \
-      jq -r ".assets[] | select(.name | test(\"GModPatchTool-Linux.zip\")) | .browser_download_url") \
+      $(curl -s https://api.github.com/repos/solsticegamestudios/GModCEFCodecFix/releases/latest | \
+      jq -r ".assets[] | select(.name | test(\"GModCEFCodecFix-Linux\")) | .browser_download_url") \
       -P /tmp/patch-gmod
-    cd /tmp/patch-gmod && unzip -q GModPatchTool-Linux.zip
-    chmod +x /tmp/patch-gmod/gmodpatchtool
-    /tmp/patch-gmod/gmodpatchtool
+    chmod +x /tmp/patch-gmod/GModCEFCodecFix-Linux
+    /tmp/patch-gmod/GModCEFCodecFix-Linux
     rm -rf /tmp/patch-gmod
 
 # Kills all processes related to wine and proton. This forces it to restart next time you launch the game (you might still have to press STOP in steam to kill the game binary)
-[group("gaming")]
 fix-proton-hang:
     #!/usr/bin/bash
     PROTONCORE=(pv-bwrap pressure-vessel reaper explorer.exe rpcss.exe plugplay.exe services.exe svchost.exe winedevice.exe winedevice.exe wineserver)
@@ -26,7 +23,6 @@ fix-proton-hang:
     done
 
 # Reset the Steam folder back to a fresh state
-[group("gaming")]
 fix-reset-steam:
     #!/usr/bin/bash
     source /usr/lib/ujust/ujust.sh
@@ -54,7 +50,6 @@ fix-reset-steam:
     exit 0
 
 # Toggle Bluetooth headset profile mode. If enabled, mic will be disabled on the Bluetooth device preventing the switch to headset profile, which has poor audio quality. Disable to restore mic functionality.
-[group("audio")]
 toggle-bt-mic:
     #!/usr/bin/bash
     CONFIG_FILE="/etc/wireplumber/wireplumber.conf.d/51-mitigate-annoying-profile-switch.conf"
@@ -161,62 +156,6 @@ toggle-wol ACTION="":
       echo "No changes were made."
     fi
 
-# enable or disable IWD as a replacement for wpa_supplicant
-[group("network")]
-toggle-iwd:
-    #!/usr/bin/bash
-    # Explain the purpose of the script
-    echo -e "This script manages enabling or disabling iwd as a replacement for wpa_supplicant for Wi-Fi networking."
-    echo -e "Enabling this can improve throughput, mesh networking, and reduce latency increases when scanning for networks"
-    echo -e "Disabling this can improve corporate or eduroam network compatibility"
-    echo -e ""
-    echo -e "WARNING: Changing this will remove all saved wifi networks"
-    get_current_status() {
-      if [[ -f "/etc/NetworkManager/conf.d/iwd.conf" ]]; then
-        echo "Enabled"
-      else
-        echo "Disabled"
-      fi
-    }
-    remove_saved_networks() {
-      nmcli -t -f NAME connection show | while read -r line; do sudo nmcli connection delete "$line"; done
-    }
-    enable_iwd() {
-      sudo mkdir -p "/etc/NetworkManager/conf.d/"
-      sudo rm -f "/etc/NetworkManager/conf.d/iwd.conf"
-      printf "[device]\nwifi.backend=iwd" | sudo tee /etc/NetworkManager/conf.d/iwd.conf > /dev/null
-      sudo systemctl mask wpa_supplicant.service
-      remove_saved_networks
-      echo -e "iwd enabled. Reboot required to apply changes."
-    }
-    disable_iwd() {
-      sudo rm -f "/etc/NetworkManager/conf.d/iwd.conf"
-      sudo systemctl unmask wpa_supplicant.service
-      remove_saved_networks
-      echo -e "iwd disabled. Reboot required to apply changes."
-    }
-    # Display current status
-    current_status=$(get_current_status)
-    echo -e "\nCurrent iwd status: $current_status\n"
-    # Prompt user for action
-    CHOICE=$(ugum choose "Enable iwd" "Disable iwd" "Exit without changes")
-    case "$CHOICE" in
-      "Enable iwd")
-        enable_iwd
-        ;;
-      "Disable iwd")
-        disable_iwd
-        ;;
-      "Exit without changes")
-        echo "No changes made."
-        ;;
-      *)
-        echo "Invalid choice. Exiting without changes."
-        ;;
-    esac
-
-# enable or disable a fix for 7th and 8th generation Intel chips not being able to sleep
-[group("hardware")]
 toggle-i915-sleep-fix:
     #!/usr/bin/bash
     # Explain the purpose of the script
@@ -295,147 +234,4 @@ toggle-i915-sleep-fix:
       *)
         echo "Invalid choice. Exiting without changes."
         ;;
-    esac
-
-# Toggle GPP0 wakeup fix to prevent unwanted system wake-ups, primarily affects Gigabyte motherboards.
-[group("hardware")]
-_toggle-gigabyte-wake-fix:
-    #!/usr/bin/bash
-    source /usr/lib/ujust/ujust.sh
-    SERVICE_FILE="/etc/systemd/system/biosWakeupWorkaround.service"
-
-    if systemctl is-enabled biosWakeupWorkaround.service &>/dev/null; then
-      echo "Current status: ${green}${bold}enabled${normal}"
-      CHOICE=$(ugum choose "Disable GPP0 wakeup fix" "Exit without changes")
-      if [[ "$CHOICE" == "Disable GPP0 wakeup fix" ]]; then
-        sudo systemctl disable --now biosWakeupWorkaround.service
-        sudo rm -f "$SERVICE_FILE"
-        sudo systemctl daemon-reload
-        echo "GPP0 wakeup fix ${red}${bold}disabled${normal} and service file removed."
-      else
-        echo "No changes made."
-      fi
-    else
-      echo "Current status: ${red}${bold}disabled${normal}"
-      CHOICE=$(ugum choose "Enable GPP0 wakeup fix" "Exit without changes")
-      if [[ "$CHOICE" == "Enable GPP0 wakeup fix" ]]; then
-        {
-          echo "[Unit]"
-          echo "Description=Workaround for Gigabyte BIOS sleep/wakeup bug"
-          echo ""
-          echo "[Service]"
-          echo "Type=oneshot"
-          echo 'ExecStart=/bin/sh -c '"'"'if grep GPP0 /proc/acpi/wakeup | grep -q enabled; then echo GPP0 > /proc/acpi/wakeup; fi'"'"
-          echo ""
-          echo "[Install]"
-          echo "WantedBy=multi-user.target"
-        } | sudo tee "$SERVICE_FILE" > /dev/null
-        sudo systemctl daemon-reload
-        sudo systemctl enable --now biosWakeupWorkaround.service
-        echo "GPP0 wakeup fix ${green}${bold}enabled${normal}."
-      else
-        echo "No changes made."
-      fi
-    fi
-
-# Manage Steam game shortcuts on the Desktop. Usage: just steam-icons [command] (list, remove, enable, disable)
-steam-icons ACTION="":
-    #!/usr/bin/bash
-    source /usr/lib/ujust/ujust.sh
-    DESKTOP_DIR="$HOME/Desktop"
-    SERVICE_NAME="steam-icons-cleanup.service"
-    OPTION={{ ACTION }}
-    # Function to count and list Steam shortcuts
-    list_shortcuts() {
-      STEAM_SHORTCUTS=()
-      while IFS= read -r shortcut; do
-      if grep -q "Comment=Play this game on Steam" "$shortcut" 2>/dev/null; then
-        STEAM_SHORTCUTS+=("$shortcut")
-      fi
-      done < <(find "$DESKTOP_DIR" -name "*.desktop" -type f 2>/dev/null)
-      SHORTCUT_COUNT=${#STEAM_SHORTCUTS[@]}
-      if [[ $SHORTCUT_COUNT -eq 0 ]]; then
-      echo "No Steam game shortcuts found on the Desktop."
-      return 0
-      fi
-      echo -e "${b}Found $SHORTCUT_COUNT Steam game shortcuts on your Desktop:${n}"
-      for shortcut in "${STEAM_SHORTCUTS[@]}"; do
-      GAME_NAME=$(grep "^Name=" "$shortcut" | sed 's/^Name=//')
-      echo "- $GAME_NAME"
-      done
-      echo ""
-      return $SHORTCUT_COUNT
-    }
-    # Function to remove all shortcuts
-    remove_all_shortcuts() {
-      STEAM_SHORTCUTS=()
-      while IFS= read -r shortcut; do
-      if grep -q "Comment=Play this game on Steam" "$shortcut" 2>/dev/null; then
-        STEAM_SHORTCUTS+=("$shortcut")
-      fi
-      done < <(find "$DESKTOP_DIR" -name "*.desktop" -type f 2>/dev/null)
-      SHORTCUT_COUNT=${#STEAM_SHORTCUTS[@]}
-      if [[ $SHORTCUT_COUNT -eq 0 ]]; then
-      echo "No Steam game shortcuts found on the Desktop."
-      return
-      fi
-      for shortcut in "${STEAM_SHORTCUTS[@]}"; do
-      GAME_NAME=$(grep "^Name=" "$shortcut" | sed 's/^Name=//')
-      rm -f "$shortcut"
-      done
-      echo -e "${green}${b}Successfully removed $SHORTCUT_COUNT Steam game shortcuts.${n}"
-    }
-    # Check if auto-cleanup service is enabled
-    SERVICE_STATUS="disabled"
-    if systemctl --user is-enabled "$SERVICE_NAME" &>/dev/null; then
-      SERVICE_STATUS="enabled"
-    fi
-    # Process direct command arguments
-    if [ "$OPTION" == "help" ]; then
-      echo "Usage: just steam-icons [command]"
-      echo "Commands:"
-      echo "  list     - List all Steam shortcuts on Desktop"
-      echo "  remove   - Remove all Steam shortcuts"
-      echo "  enable   - Enable automatic cleanup on login"
-      echo "  disable  - Disable automatic cleanup"
-      echo "  help     - Show this help message"
-      exit 0
-    elif [ "$OPTION" == "list" ]; then
-      list_shortcuts
-      exit 0
-    elif [ "$OPTION" == "remove" ]; then
-      remove_all_shortcuts
-      exit 0
-    elif [ "$OPTION" == "enable" ]; then
-      systemctl --user enable --now "$SERVICE_NAME"
-      echo -e "${green}${b}Auto-cleanup enabled.${n} Steam game shortcuts will be automatically removed at login."
-      exit 0
-    elif [ "$OPTION" == "disable" ]; then
-      systemctl --user disable --now "$SERVICE_NAME" 2>/dev/null || true
-      echo -e "${red}${b}Auto-cleanup disabled.${n} Steam game shortcuts will no longer be automatically removed."
-      exit 0
-    fi
-    # If no arguments provided or not matched, show interactive menu
-    echo -e "Auto-cleanup service status: ${b}${SERVICE_STATUS}${n}\n"
-    list_shortcuts
-    # Ask the user what they want to do
-    OPTION=$(ugum choose "Remove All Shortcuts Now" "Enable Auto-Cleanup" "Disable Auto-Cleanup" "Exit")
-    case "$OPTION" in
-      "Remove All Shortcuts Now")
-      remove_all_shortcuts
-      ;;
-      "Enable Auto-Cleanup")
-      systemctl --user enable --now "$SERVICE_NAME"
-      echo -e "\n${green}${b}Auto-cleanup enabled.${n} Steam game shortcuts will be automatically removed at login."
-      ;;
-      "Disable Auto-Cleanup")
-      systemctl --user disable --now "$SERVICE_NAME" 2>/dev/null || true
-      echo -e "\n${red}${b}Auto-cleanup disabled.${n} Steam game shortcuts will no longer be automatically removed."
-      ;;
-      "Exit")
-      echo "No changes were made."
-      ;;
-      *)
-      echo "Invalid choice. Exiting without changes."
-      ;;
     esac

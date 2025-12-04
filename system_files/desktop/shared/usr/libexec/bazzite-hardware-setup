@@ -3,10 +3,11 @@
 IMAGE_INFO="/usr/share/ublue-os/image-info.json"
 IMAGE_NAME=$(jq -r '."image-name"' < $IMAGE_INFO)
 IMAGE_BRANCH=$(jq -r '."image-branch"' < $IMAGE_INFO)
+IMAGE_FLAVOR=$(jq -r '."image-flavor"' < $IMAGE_INFO)
 FEDORA_VERSION=$(jq -r '."fedora-version"' < $IMAGE_INFO)
 
 # SCRIPT VERSION
-HWS_VER=64
+HWS_VER=57
 HWS_VER_FILE="/etc/bazzite/hws_version"
 HWS_VER_RAN=$(cat $HWS_VER_FILE)
 
@@ -15,16 +16,10 @@ KNOWN_IMAGE_NAME_FILE="/etc/bazzite/image_name"
 KNOWN_IMAGE_NAME=$(cat $KNOWN_IMAGE_NAME_FILE)
 KNOWN_IMAGE_BRANCH_FILE="/etc/bazzite/image_branch"
 KNOWN_IMAGE_BRANCH=$(cat $KNOWN_IMAGE_BRANCH_FILE)
+KNOWN_IMAGE_FLAVOR_FILE="/etc/bazzite/image_flavor"
+KNOWN_IMAGE_FLAVOR=$(cat $KNOWN_IMAGE_FLAVOR_FILE)
 KNOWN_FEDORA_VERSION_FILE="/etc/bazzite/fedora_version"
 KNOWN_FEDORA_VERSION=$(cat $KNOWN_FEDORA_VERSION_FILE)
-
-if [[ "$KNOWN_IMAGE_NAME" == "$IMAGE_NAME" && \
-    "$KNOWN_IMAGE_BRANCH" == "$IMAGE_BRANCH" && \
-    "$KNOWN_FEDORA_VERSION" == "$FEDORA_VERSION" && \
-    "$HWS_VER_RAN" == "$HWS_VER" ]]; then
-  echo "Hardware setup already ran for version $HWS_VER_RAN, skipping"
-  exit 0
-fi
 
 # GLOBAL
 SYS_ID="$(/usr/libexec/hwsupport/sysid)"
@@ -42,11 +37,36 @@ mkdir -p /etc/bazzite/fixups
 # KERNEL ARGUMENTS
 echo "Current kargs: $KARGS"
 
+if /usr/libexec/hwsupport/valve-hardware || /usr/libexec/hwsupport/hhd-supported-hardware; then
+  echo "Checking for ppfeaturemask karg on hardware that requires it"
+  if [[ ! $KARGS =~ "ppfeaturemask" ]]; then
+    NEEDED_KARGS+=("--append-if-missing="$(printf 'amdgpu.ppfeaturemask=0x%x\n' "$(($(cat /sys/module/amdgpu/parameters/ppfeaturemask) | 0x4000))"))
+  fi
+fi
+
 if /usr/libexec/hwsupport/valve-hardware; then
   echo "Checking for needed karg changes (Jupiter/Galileo)"
 
   if [[ ! $KARGS =~ "amd_iommu" ]]; then
     NEEDED_KARGS+=("--append-if-missing=amd_iommu=off")
+  fi
+
+  if [[ ! $KARGS =~ "amdgpu.gttsize" ]]; then
+    if [[ "$(awk '/MemTotal/{print $(NF-1)}' /proc/meminfo)" == "31664740" ]]; then
+      echo "32GB RAM Steam Deck detected"
+      NEEDED_KARGS+=("--append-if-missing=amdgpu.gttsize=16256")
+    else
+      NEEDED_KARGS+=("--append-if-missing=amdgpu.gttsize=8128")
+    fi
+  fi
+
+  echo "Turning off pstate for power consumption reasons"
+  if [[ $KARGS =~ "amd_pstate=passive" ]]; then
+    NEEDED_KARGS+=("--delete-if-present=amd_pstate=passive")
+  fi
+
+  if [[ ! $KARGS =~ "amd_pstate" ]]; then
+    NEEDED_KARGS+=("--append-if-missing=amd_pstate=disable")
   fi
 fi
 
@@ -59,12 +79,17 @@ fi
 
 if [[ ":Framework:" =~ ":$VEN_ID:" ]]; then
   if [[ "$SYS_ID" == "Laptop 16 ("* ]]; then
-    if [[ $KARGS =~ "amdgpu.dcdebugmask" ]]; then
-      echo "Removing old, no longer needed Framework 16 fix."
-      NEEDED_KARGS+=("--delete-if-present=amdgpu.dcdebugmask=0x410")
+    if [[ ! $KARGS =~ "amdgpu.dcdebugmask" ]]; then
+      echo "Framework 16 Laptop detected, fixing display artifacts"
+      NEEDED_KARGS+=("--append-if-missing=amdgpu.dcdebugmask=0x410")
     fi
   fi
-  if [[ "GenuineIntel" == "$CPU_VENDOR" ]]; then
+  if [[ "AuthenticAMD" == "$CPU_VENDOR" ]]; then
+    if [[ ! $KARGS =~ "iomem" ]]; then
+      echo "AMD Framework Laptop detected, adding needed kargs for ryzenadj"
+      NEEDED_KARGS+=("--append-if-missing=iomem=relaxed")
+    fi
+  elif [[ "GenuineIntel" == "$CPU_VENDOR" ]]; then
     if [[ ! $KARGS =~ "hid_sensor_hub" ]]; then
       echo "Intel Framework Laptop detected, applying needed keyboard fix"
       NEEDED_KARGS+=("--append-if-missing=module_blacklist=hid_sensor_hub");
@@ -72,53 +97,62 @@ if [[ ":Framework:" =~ ":$VEN_ID:" ]]; then
   fi
 fi
 
-#
-# GTT SIZE cleanup
-#
-if [ ! -f /etc/bazzite/fixups/gttsize ]; then
-  echo "Removing gttsize for device in kernel if exists (default is 50%)"
-  if [[ ":83E1:" =~ ":$SYS_ID:" ]]; then
-    NEEDED_KARGS+=("--delete-if-present=amdgpu.gttsize=8128")
-  elif [[ ":ROG Ally RC71L:" =~ ":$SYS_ID:" ]]; then
-    NEEDED_KARGS+=("--delete-if-present=amdgpu.gttsize=8128")
-  elif [[ ":ROG Ally X RC72LA:" =~ ":$SYS_ID:" ]]; then
-    NEEDED_KARGS+=("--delete-if-present=amdgpu.gttsize=12192")
-  elif [[ ":ONEXPLAYER F1:ONEXPLAYER F1L:ONEXPLAYER F1 EVA-01:ONEXPLAYER X1Pro:Loki Max:Zeenix Pro:" =~ ":$SYS_ID:" ]]; then
-    NEEDED_KARGS+=("--delete-if-present=amdgpu.gttsize=16256")
-  elif /usr/libexec/hwsupport/valve-hardware; then
-    NEEDED_KARGS+=("--delete-if-present=amdgpu.gttsize=16256")
-    NEEDED_KARGS+=("--delete-if-present=amdgpu.gttsize=8128")
+if [[ ":83E1:" =~ ":$SYS_ID:" ]]; then
+  if [[ ! $KARGS =~ "video" ]]; then
+    echo "Adding panel orientation for Lenovo Legion Go"
+    NEEDED_KARGS+=("--append-if-missing=video=eDP-1:panel_orientation=left_side_up")
+  fi
+  if [[ ! $KARGS =~ "amdgpu.gttsize" ]]; then
+    echo "Adding GTTSize for Lenovo Legion Go"
+    NEEDED_KARGS+=("--append-if-missing=amdgpu.gttsize=8128")
+  fi
+  if [[ ! $KARGS =~ "amdgpu.sg_display" ]]; then
+    echo "Adding SG Display for Lenovo Legion Go"
+    NEEDED_KARGS+=("--append-if-missing=amdgpu.sg_display=0")
+  fi
+elif [[ ":ROG Ally RC71L:" =~ ":$SYS_ID:" ]]; then
+  if [[ ! $KARGS =~ "amdgpu.gttsize" ]]; then
+    echo "Adding GTTSize for ASUS Ally"
+    NEEDED_KARGS+=("--append-if-missing=amdgpu.gttsize=8128")
+  fi
+  if [[ ! $KARGS =~ "amdgpu.sg_display" ]]; then
+    echo "Adding SG Display for ASUS Ally"
+    NEEDED_KARGS+=("--append-if-missing=amdgpu.sg_display=0")
+  fi
+elif [[ ":ROG Ally X RC72LA:" =~ ":$SYS_ID:" ]]; then
+  if [[ ! $KARGS =~ "amdgpu.gttsize" ]]; then
+    echo "Adding GTTSize for ASUS Ally X"
+    NEEDED_KARGS+=("--append-if-missing=amdgpu.gttsize=12192")
+  fi
+  if [[ ! $KARGS =~ "amdgpu.sg_display" ]]; then
+    echo "Adding SG Display for ASUS Ally X"
+    NEEDED_KARGS+=("--append-if-missing=amdgpu.sg_display=0")
+  fi
+elif [[ ":G1617-01:" =~ ":$SYS_ID:" && ! $CPU_MODEL =~ 8640U|8840U|7640U ]]; then
+  if [[ ! $KARGS =~ "video" ]]; then
+    echo "Adding panel orientation for GPD Win Mini 2023"
+    NEEDED_KARGS+=("--append-if-missing=video=eDP-1:panel_orientation=right_side_up")
+  fi
+elif [[ ":G1617-01:" =~ ":$SYS_ID:" ]]; then
+  echo "Removing panel orientation for GPD Win Mini 2024 if exists"
+  NEEDED_KARGS+=("--delete-if-present=video=eDP-1:panel_orientation=right_side_up")
+elif [[ ":WIN2:" =~ ":$SYS_ID:" ]]; then
+  if [[ ! $KARGS =~ "video" ]]; then
+    echo "Adding panel orientation for GPD Win 2"
+    NEEDED_KARGS+=("--append-if-missing=video=eDP-1:panel_orientation=right_side_up")
   fi
 fi
 
-# Remove sg_display
-if [[ ":83E1:ROG Ally RC71L:ROG Ally X RC72LA:" =~ ":$SYS_ID:" ]]; then
-  if [[ ! -f /etc/bazzite/fixups/sg_display2 && $KARGS =~ "amdgpu.sg_display" ]]; then
-    echo "Removing sd_display=0 (it is not needed anymore)"
-    NEEDED_KARGS+=("--delete-if-present=amdgpu.sg_display=0")
+if [[ ":ONEXPLAYER F1:ONEXPLAYER F1L:ONEXPLAYER F1 EVA-01:ONEXPLAYER X1Pro:" =~ ":$SYS_ID:" ]]; then
+  if [[ ! $KARGS =~ "video" ]]; then
+    echo "Adding panel orientation for ONEXPLAYER F1, ONEXFLY, & X1 Pro"
+    NEEDED_KARGS+=("--append-if-missing=video=eDP-1:panel_orientation=left_side_up")
   fi
-fi
-
-if [[ ! -f /etc/bazzite/fixups/orientation_old2 ]]; then
-  echo "Removing panel orientation for device in kernel if exists"
-  if [[ ":ROG Ally RC71L:" =~ ":$SYS_ID:" ]]; then
-    NEEDED_KARGS+=("--delete-if-present=video=eDP-1:panel_orientation=left_side_up")
-  elif [[ ":G1617-01:" =~ ":$SYS_ID:" && ! $CPU_MODEL =~ 8640U|8840U|7640U ]]; then
-    NEEDED_KARGS+=("--delete-if-present=video=eDP-1:panel_orientation=right_side_up")
-  elif [[ ":G1617-01:" =~ ":$SYS_ID:" ]]; then
-    NEEDED_KARGS+=("--delete-if-present=video=eDP-1:panel_orientation=right_side_up")
-  elif [[ ":WIN2:" =~ ":$SYS_ID:" ]]; then
-    NEEDED_KARGS+=("--delete-if-present=video=eDP-1:panel_orientation=right_side_up")
-  elif [[ ":ONEXPLAYER F1:ONEXPLAYER F1L:ONEXPLAYER F1 EVA-01:ONEXPLAYER X1Pro:Loki Max:Zeenix Pro:" =~ ":$SYS_ID:" ]]; then
-    NEEDED_KARGS+=("--delete-if-present=video=eDP-1:panel_orientation=left_side_up")
-  fi
-fi
-
-# Slide reboots randomly, acpi=strict seems to fix it
-if [[ ":SLIDE:" =~ ":$SYS_ID:" ]]; then
-  if [[ ! $KARGS =~ "acpi=strict" ]]; then
-    echo "Adding acpi=strict for Slide to avoid random reboots"
-    NEEDED_KARGS+=("--append-if-missing=acpi=strict")
+  if [[ "$(awk '/MemTotal/{print $(NF-1)}' /proc/meminfo)" == "31664740" ]]; then
+    if [[ ! $KARGS =~ "amdgpu.gttsize" ]]; then
+      echo "Adding GTTSize for ONEXPLAYER (32GB RAM)"
+      NEEDED_KARGS+=("--append-if-missing=amdgpu.gttsize=16256")
+    fi
   fi
 fi
 
@@ -134,14 +168,22 @@ if [[ ! $KARGS =~ "disable_ertm" ]]; then
   NEEDED_KARGS+=("--append-if-missing=bluetooth.disable_ertm=1")
 fi
 
-if [[ ! -f /etc/bazzite/fixups/preempt_cleanup2 && $KARGS =~ "preempt" ]]; then
-  echo "Removing full preemption (once)"
-  NEEDED_KARGS+=("--delete-if-present=preempt=full")
+if [[ ! $KARGS =~ "preempt" ]]; then
+  echo "Adding needed kargs for full preemption"
+  NEEDED_KARGS+=("--append-if-missing=preempt=full")
 fi
 
 if [[ $KARGS =~ "nomodeset" ]]; then
   echo "Removing nomodeset"
   NEEDED_KARGS+=("--delete-if-present=nomodeset")
+fi
+
+if [[ -n "$NEEDED_KARGS" ]]; then
+  echo "Found needed karg changes, applying the following: ${NEEDED_KARGS[*]}"
+  plymouth display-message --text="Updating kargs - Please wait, this may take a while" || true
+  rpm-ostree kargs ${NEEDED_KARGS[*]} --reboot || exit 1
+else
+  echo "No karg changes needed"
 fi
 
 if [[ $IMAGE_NAME =~ "deck" || $IMAGE_NAME =~ "ally" ]]; then
@@ -166,8 +208,23 @@ if [[ $IMAGE_NAME =~ "deck" || $IMAGE_NAME =~ "ally" ]]; then
     systemctl disable --now jupiter-biosupdate.service
     systemctl disable --now jupiter-controller-update.service
     systemctl disable --now ryzenadj.service
+    systemctl disable --now batterylimit.service
   fi
   systemctl enable --now ds-inhibit.service
+fi
+
+# FSTAB CONFIGURATION
+if [[ ! -e /etc/ublue-os/.fstab_adjusted.flag && $(grep "compress=zstd" /etc/fstab) ]]; then
+    echo "Applying fstab param adjustments"
+    if grep -q '64GB' <<< "$(lsblk -o MODEL)"; then
+        echo "64GB eMMC detected"
+        sed -i 's/compress=zstd:1/noatime,lazytime,discard=sync,compress-force=zstd:3,space_cache=v2/g' /etc/fstab
+    else
+        sed -i 's/compress=zstd:1/noatime,lazytime,commit=120,discard=async,compress-force=zstd:1,space_cache=v2/g' /etc/fstab
+    fi
+    touch /etc/ublue-os/.fstab_adjusted.flag
+else
+    echo "No fstab param adjustments needed"
 fi
 
 # ZRAM MINIMUM-FREE CONFIGURATION
@@ -183,9 +240,11 @@ fi
 # FRAMEWORK AMD FIXES
 if [[ ":Framework:" =~ ":$VEN_ID:" ]]; then
   if [[ "AuthenticAMD" == "$CPU_VENDOR" ]]; then
-    # Remove ryzen_smu module load if it exists
-    rm -rf /etc/modules-load.d/ryzen_smu.conf
-
+    # Load Ryzen SMU on AMD Framework Laptops
+    if ! [[ -f "/etc/modules-load.d/ryzen_smu.conf" ]]; then
+      mkdir -p "/etc/modules-load.d"
+      printf "# Load ryzen_smu driver upon startup\nryzen_smu\n" >> "/etc/modules-load.d/ryzen_smu.conf"
+    fi
     # Framework 13 AMD fixes
     if [[ $SYS_ID == "Laptop ("* ]]; then
       if [[ ! -f /etc/modprobe.d/alsa.conf ]]; then
@@ -270,7 +329,7 @@ if grep -qv "graphical.target" <<< "$(systemctl get-default)"; then
 fi
 
 # Cleanup btrfs oopsie
-# default config has a 10 year limit, which is ridiculous
+# default config has a 10 year limit, which is rediculous
 # FIXME: This fix was added in 12/2024, remove it in a few months
 if [ ! -f /etc/bazzite/fixups/snapper_cleanup ] &&
   [ -f /etc/snapper/configs/root ] &&
@@ -332,58 +391,38 @@ if [ ! -f /etc/bazzite/fixups/grub_fixup ]; then
 fi
 touch /etc/bazzite/fixups/grub_fixup
 
-if [ ! -f /etc/bazzite/fixups/grub_blank ] &&
-    [ -z $(grep "GRUB_TERMINAL_OUTPUT=" /etc/default/grub) ]; then
-  echo 'GRUB_TERMINAL_OUTPUT="console"' >> /etc/default/grub
-
-  # Update grub
-  if [ -d /sys/firmware/efi ]; then
-    echo "Updating EFI grub config"
-    grub2-mkconfig -o /etc/grub2-efi.cfg
-  else
-    echo "Updating BIOS grub config"
-    grub2-mkconfig -o /etc/grub2.cfg
+# Fix users who've layered CoolerControl in the past.
+if [ ! -f /etc/bazzite/fixups/coolercontrol_fixup ]; then
+  if rpm-ostree status --booted | grep -q "coolercontrol"; then
+      sed -i 's@enabled=0@enabled=1@g' /etc/yum.repos.d/terra.repo
   fi
+  touch /etc/bazzite/fixups/coolercontrol_fixup
 fi
-touch /etc/bazzite/fixups/grub_blank
+
+# Fix users who've layered LACT in the past.
+if [ ! -f /etc/bazzite/fixups/lact_fixup ]; then
+  if rpm-ostree status --booted | grep -q "lact"; then
+      dnf5 -y copr enable ilyaz/LACT
+  fi
+  touch /etc/bazzite/fixups/lact_fixup
+fi
+
+# Fix users who've layered CDEmu in the past.
+if [ ! -f /etc/bazzite/fixups/cdemu_fixup ]; then
+  if rpm-ostree status --booted | grep -q "cdemu-daemon"; then
+      dnf5 -y copr enable rok/cdemu
+  fi
+  touch /etc/bazzite/fixups/cdemu_fixup
+fi
 
 # Fix missing hostname file breaking distrobox
 if [ ! -f /etc/hostname ]; then
   touch /etc/hostname
 fi
 
-# Remove old hhd@ enables
-# Check if we've already removed old hhd@ service enablements
-if [ ! -f /etc/bazzite/fixups/hhd_service_cleanup ]; then
-  echo "Cleaning up old hhd@ service enables"
-  for service in $(systemctl list-units --type=service --all 'hhd@*.service' --no-legend | awk '{print $1}'); do
-    echo "Disabling $service"
-    systemctl disable --now "$service" || true
-  done
-  touch /etc/bazzite/fixups/hhd_service_cleanup
-fi
-
-if [[ -n "$NEEDED_KARGS" ]]; then
-  echo "Found needed karg changes, applying the following: ${NEEDED_KARGS[*]}"
-  plymouth display-message --text="Preparing System - Please wait, this may take a while" || true
-  rpm-ostree kargs ${NEEDED_KARGS[*]} || exit 1
-  SHOULD_REBOOT=true
-else
-  echo "No karg changes needed"
-fi
-# Applied / did not need to apply
-touch /etc/bazzite/fixups/sg_display2
-touch /etc/bazzite/fixups/preempt_cleanup2
-touch /etc/bazzite/fixups/orientation_old2
-touch /etc/bazzite/fixups/gttsize
-
 mkdir -p /etc/bazzite
 echo $HWS_VER > $HWS_VER_FILE
 echo $IMAGE_NAME > $KNOWN_IMAGE_NAME_FILE
+echo $IMAGE_FLAVOR > $KNOWN_IMAGE_FLAVOR_FILE
 echo $FEDORA_VERSION > $KNOWN_FEDORA_VERSION_FILE
 echo $IMAGE_BRANCH > $KNOWN_IMAGE_BRANCH_FILE
-
-if [[ "$SHOULD_REBOOT" == true ]]; then
-  echo "Rebooting to apply karg changes"
-  reboot
-fi

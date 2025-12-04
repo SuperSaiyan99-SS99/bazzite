@@ -1,12 +1,11 @@
 # vim: set ft=make :
 
 # Setup and configure CDEmu Daemon and Client plus GUI Apps
-[group("apps")]
 setup-cdemu ACTION="":
     #!/usr/bin/bash
     source /usr/lib/ujust/ujust.sh
     CDEMU_STATE="$(rpm -qa cdemu-daemon)"
-    GUI_EDITION="$(cat /etc/os-release | grep -w VARIANT | tr '[:upper:]' '[:lower:]' | sed 's/^.*=//; s/"//g')"
+    GUI_EDITION="$(cat /etc/os-release | grep VARIANT_ID | sed 's/^.*=//')"
     OPTION={{ ACTION }}
     if [ "$CDEMU_STATE" == "" ]; then
         CDEMU_STATE="${red}${b}Not Installed${n}"

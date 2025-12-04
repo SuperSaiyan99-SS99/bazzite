@@ -1,7 +1,6 @@
 # vim: set ft=make :
 
 # Reenable rmlint trim feature
-[group("system")]
 enable-rmlint ACTION="":
     #!/usr/bin/bash
     source /usr/lib/ujust/ujust.sh

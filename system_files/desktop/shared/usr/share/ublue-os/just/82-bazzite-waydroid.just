@@ -3,7 +3,6 @@
 alias configure-waydroid := setup-waydroid
 
 # Launch Waydroid configuration helper
-[group("apps")]
 setup-waydroid ACTION="":
     #!/usr/bin/bash
     source /usr/lib/ujust/ujust.sh
@@ -28,10 +27,8 @@ setup-waydroid ACTION="":
       if [[ ! $IMAGE_NAME =~ "deck" && ! $IMAGE_NAME =~ "ally" ]]; then
         sudo systemctl enable --now waydroid-container
       fi
-      echo "This might take a bit, please be patient"
       sudo waydroid init -c 'https://ota.waydro.id/system' -v 'https://ota.waydro.id/vendor'
       sudo restorecon -R /var/lib/waydroid
-      mkdir -p ~/.local/share/applications
       cp /usr/share/applications/waydroid-container-restart.desktop ~/.local/share/applications
       echo "Waydroid has been initialized, please run waydroid once before you Configure Waydroid"
     elif [[ "${OPTION,,}" =~ ^configure ]]; then

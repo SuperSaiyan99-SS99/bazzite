@@ -1,5 +1,5 @@
 %bcond_without check
-%if 0%{?rhel} >= 9 || 0%{?fedora} > 41
+%if 0%{?rhel} >= 10 || 0%{?fedora} > 41
     %bcond_without ostree_ext
 %else
     %bcond_with ostree_ext
@@ -11,18 +11,9 @@
     %bcond_with rhsm
 %endif
 
-%global rust_minor %(rustc --version | cut -f2 -d" " | cut -f2 -d".")
-
-# https://github.com/bootc-dev/bootc/issues/1640
-%if 0%{?fedora} || 0%{?rhel} >= 10 || 0%{?rust_minor} >= 89
-    %global new_cargo_macros 1
-%else
-    %global new_cargo_macros 0
-%endif
-
 Name:           bootc
-Version:        1.9.0
-Release:        100.bazzite
+Version:        1.1.7
+Release:        101.bazzite
 Summary:        Bootable container system
 
 # Apache-2.0
@@ -34,11 +25,11 @@ Summary:        Bootable container system
 # MIT OR Apache-2.0
 # Unlicense OR MIT
 License:        Apache-2.0 AND BSD-3-Clause AND MIT AND (Apache-2.0 OR BSL-1.0) AND (Apache-2.0 OR MIT) AND (Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT) AND (Unlicense OR MIT)
-URL:            https://github.com/bootc-dev/bootc
+URL:            https://github.com/containers/bootc
 Source0:        %{url}/releases/download/v%{version}/bootc-%{version}.tar.zstd
 Source1:        %{url}/releases/download/v%{version}/bootc-%{version}-vendor.tar.zstd
 
-Patch0:         unhide.patch
+Patch0: unhide.patch
 
 # https://fedoraproject.org/wiki/Changes/EncourageI686LeafRemoval
 ExcludeArch:    %{ix86}
@@ -47,7 +38,6 @@ BuildRequires: libzstd-devel
 BuildRequires: make
 BuildRequires: ostree-devel
 BuildRequires: openssl-devel
-BuildRequires: go-md2man
 %if 0%{?rhel}
 BuildRequires: rust-toolset
 %else
@@ -59,13 +49,10 @@ BuildRequires: skopeo ostree
 
 # Backing storage tooling https://github.com/containers/composefs/issues/125
 Requires: composefs
-# Keep this list in sync with workspace.metadata.binary-dependencies until we sync
-# it automatically
+# For OS updates
 Requires: ostree
 Requires: skopeo
 Requires: podman
-Requires: util-linux-core
-Requires: /usr/bin/chcon
 # For bootloader updates
 Recommends: bootupd
 
@@ -98,7 +85,7 @@ rm vendor-config.toml
 
 %build
 # Build the main bootc binary
-%if %new_cargo_macros
+%if 0%{?fedora} || 0%{?rhel} >= 10
     %cargo_build %{?with_rhsm:-f rhsm}
 %else
     %cargo_build %{?with_rhsm:--features rhsm}
@@ -107,7 +94,7 @@ rm vendor-config.toml
 # Build the system reinstallation CLI binary
 %global cargo_args -p system-reinstall-bootc
 export SYSTEM_REINSTALL_BOOTC_INSTALL_PODMAN_PATH=%{system_reinstall_bootc_install_podman_path}
-%if %new_cargo_macros
+%if 0%{?fedora} || 0%{?rhel} >= 10
     # In cargo-rpm-macros, the cargo_build macro does flag processing,
     # so we need to pass '--' to signify that cargo_args is not part
     # of the macro args
@@ -118,8 +105,6 @@ export SYSTEM_REINSTALL_BOOTC_INSTALL_PODMAN_PATH=%{system_reinstall_bootc_insta
     # what we want.
     %cargo_build %cargo_args
 %endif
-
-make manpages
 
 %cargo_vendor_manifest
 # https://pagure.io/fedora-rust/rust-packaging/issue/33
@@ -138,12 +123,13 @@ cat >%{?buildroot}/%{system_reinstall_bootc_install_podman_path} <<EOF
 exec dnf -y install podman
 EOF
 chmod +x %{?buildroot}/%{system_reinstall_bootc_install_podman_path}
-# generate doc file list excluding directories; workaround for
-# https://github.com/coreos/rpm-ostree/issues/5420
-touch %{?buildroot}/%{_docdir}/bootc/baseimage/base/sysroot/.keepdir
-find %{?buildroot}/%{_docdir} ! -type d -printf '%{_docdir}/%%P\n' > bootcdoclist.txt
 
-%files -f bootcdoclist.txt
+%if %{with check}
+%check
+%cargo_test
+%endif
+
+%files
 %license LICENSE-MIT
 %license LICENSE-APACHE
 %license LICENSE.dependencies
@@ -156,7 +142,8 @@ find %{?buildroot}/%{_docdir} ! -type d -printf '%{_docdir}/%%P\n' > bootcdoclis
 %{_prefix}/libexec/libostree/ext/*
 %endif
 %{_unitdir}/*
-%{_mandir}/man*/*bootc*
+%{_docdir}/bootc/*
+%{_mandir}/man*/bootc*
 
 %files -n system-reinstall-bootc
 %{_bindir}/system-reinstall-bootc
@@ -164,3 +151,4 @@ find %{?buildroot}/%{_docdir} ! -type d -printf '%{_docdir}/%%P\n' > bootcdoclis
 
 %changelog
 %autochangelog
+

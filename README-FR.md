@@ -28,8 +28,8 @@
   - [Packages personnalisés](#packages-personnalisés)
   - [Vérification](#vérification)
   - [Secure Boot](#secure-boot)
-  - [Métriques des contributeurs](#métriques-des-contributeurs)
-  - [Historique des étoiles](#historique-des-étoiles)
+    - [Métriques des contributeurs](#métriques-des-contributeurs)
+      - [Historique des étoiles](#historique-des-étoiles)
   - [Remerciements spéciaux](#remerciements-spéciaux)
   - [Construisez le vôtre](#construisez-le-vôtre)
   - [Rejoignez la communauté](#rejoignez-la-communauté)
@@ -54,9 +54,10 @@ Bazzite est construit à partir de [ublue-os/main](https://github.com/ublue-os/m
 - Thèmes optionnels GTK3/4 inspirés de celui de Valve, correspondant à Vapor et VGUI2 de SteamOS. Installez [Gradience](https://flathub.org/apps/com.github.GradienceTeam.Gradience) pour les utiliser.
 - [LatencyFleX](https://github.com/ishitatsuyuki/LatencyFleX), [vkBasalt](https://github.com/DadSchoorse/vkBasalt), [MangoHud](https://github.com/flightlessmango/Mangohud), et [OBS VkCapture](https://github.com/nowrep/obs-vkcapture) installés et disponibles par défaut.
 - [Switcheroo-Control patché](https://copr.fedorainfracloud.org/coprs/sentry/switcheroo-control_discrete/) pour corriger le basculement iGPU/dGPU cassé par défaut.
+- Support pour [Wallpaper Engine](https://www.wallpaperengine.io/en). <sub><sup>(Seulement sur KDE)</sup></sub>
 - [Extension de shell ROM Properties Page](https://github.com/GerbilSoft/rom-properties) incluse par défaut.
 - Support complet pour [Winesync/Fastsync/NTsync](https://github.com/Frogging-Family/wine-tkg-git/issues/936).
-- [Distrobox](https://github.com/89luca89/distrobox) préinstallé.
+- [Distrobox](https://github.com/89luca89/distrobox) préinstallé avec mises à jour automatiques pour les conteneurs créés.
 - [Ptyxis Terminal](https://gitlab.gnome.org/chergert/ptyxis) est utilisé par défaut dans toutes les images. Ce terminal est spécialement conçu pour le workflow des conteneurs dans Bazzite. Pour revenir au terminal d'origine, exécutez `ujust _restore-original-terminal`.
 - Service automatisé `duperemove` pour réduire l'espace disque utilisé par les contenus du préfixe wine.
 - Support pour HDMI CEC via [libCEC](https://libcec.pulse-eight.com/).
@@ -79,7 +80,7 @@ Bazzite est construit à partir de [ublue-os/main](https://github.com/ublue-os/m
 
 De nombreuses variantes communes sont disponibles sous le nom `bazzite`, adaptée aux ordinateurs de bureau.
 
-- Mises à jour automatiques pour le système d'exploitation, les Flatpaks et plus - propulsées par [ublue-update](https://github.com/ublue-os/ublue-update) et [topgrade](https://github.com/topgrade-rs/topgrade).
+- Mises à jour automatiques pour le système d'exploitation, les Flatpaks et tous les conteneurs Distrobox - propulsées par [ublue-update](https://github.com/ublue-os/ublue-update) et [topgrade](https://github.com/topgrade-rs/topgrade).
 
 > [!IMPORTANT]
 > **Les ISOs peuvent être téléchargées depuis notre [page de versions](https://github.com/ublue-os/bazzite/releases), et un guide d'installation utile peut être trouvé [ici](https://universal-blue.discourse.group/docs?topic=30).**
@@ -123,12 +124,13 @@ Variante conçue pour être utilisée comme alternative à SteamOS sur le SteamD
 - Une mise à jour casse quelque chose ? Reviennez facilement à la version précédente de Bazzite grâce à la fonctionnalité de rollback de `rpm-ostree`. Vous pouvez même sélectionner les images précédentes au démarrage.
 - Steam et Lutris préinstallés dans l'image en tant que packages superposés.
 - [Discover Overlay](https://github.com/trigg/Discover) pour Discord préinstallé et lancé automatiquement à la fois en mode jeu et sur le bureau si Discord est installé. [Consulte la documentation officielle ici](https://trigg.github.io/Discover/bazzite).
-- Utilise ZRAM<sub><sup>(4GB)</sup></sub> avec l'algorithme de compression LZ4 par défaut.
+- Utilise ZRAM<sub><sup>(4GB)</sup></sub> avec l'algorithme de compression ZSTD par défaut, avec la possibilité de revenir à un fichier swap de 1GB et de définir une taille personnalisée si nécessaire.
 - Planificateur d'E/S Kyber pour éviter la starvation des E/S lors de l'installation de jeux ou pendant le processus de `duperemove` en arrière-plan.
 - Applique les paramètres du noyau de SteamOS.
 - Profils d'affichage calibrés en couleur pour les écrans mats et réfléchissants du SteamDeck inclus.
 - Fonctionnalités pour utilisateurs avancés désactivées par défaut, notamment :
     - Service pour l'undervolting à faible risque du SteamDeck ainsi que des ordinateurs portables AMD  via [RyzenAdj](https://github.com/FlyGoat/RyzenAdj) et [Ryzen SMU](https://gitlab.com/leogx9r/ryzen_smu), voir `ryzenadj.service` et `/etc/default/ryzenadj`.
+    - Service pour limiter le niveau de charge maximal de la batterie, voir `batterylimit.service` et `/etc/default/batterylimit`. <sup><sub>(Fonctionne même lorsque l'appareil est éteint)</sub></sup>
     - Support intégré pour l'overclocking d'affichage. Par exemple, ajoutez `GAMESCOPE_OVERRIDE_REFRESH_RATE=40,70` à `/etc/environment`.
     - Vous avez modifié votre SteamDeck avec 32 Go de RAM ? Profitez du double de la quantité maximale de VRAM, appliqué automatiquement. <sup><sub>(Pourriez-vous partager vos compétences en soudure ?)</sub></sup>
 - Les services spécifiques au matériel du SteamDeck peuvent être désactivés en exécutant `ujust disable-bios-updates` et `ujust disable-firmware-updates` dans le terminal. Ils sont automatiquement désactivés sur le matériel non-Deck, et sur les Decks avec des écrans DeckHD ou des mods de 32 Go de RAM.
@@ -251,7 +253,7 @@ Les paquets portés de SteamOS et ChimeraOS, entre autres utilisés par Bazzite,
 
 ## Vérification
 
-Ces images sont signées avec [cosign](https://docs.sigstore.dev/cosign/signing/overview/) de sigstore. Vous pouvez vérifier la signature en téléchargeant la clé `cosign.pub` depuis ce dépôt et en exécutant la commande suivante :
+Ces images sont signées avec [cosign](https://docs.sigstore.dev/cosign/overview/) de sigstore. Vous pouvez vérifier la signature en téléchargeant la clé `cosign.pub` depuis ce dépôt et en exécutant la commande suivante :
 
 ```bash
 cosign verify --key cosign.pub ghcr.io/ublue-os/bazzite
@@ -274,11 +276,11 @@ Pour les utilisateurs déjà sur une image Universal Blue, vous pouvez plutôt e
 
 Si on vous demande un mot de passe, utilisez `universalblue`.
 
-## Métriques des contributeurs
+### Métriques des contributeurs
 
 ![Bazzite](https://repobeats.axiom.co/api/embed/86b500d79c613015ad16f56df76c8e13f3fd98ae.svg "Image d'analyse Repobeats")
 
-## Historique des étoiles
+#### Historique des étoiles
 
 <a href="https://star-history.com/#ublue-os/bazzite&Date">
   <picture>
@@ -292,7 +294,7 @@ Si on vous demande un mot de passe, utilisez `universalblue`.
 
 Bazzite est un effort communautaire et ne serait pas possible sans le soutien de chacun. Voici quelques personnes qui nous ont aidés tout au long du chemin :
 
-- [amelia.svg](https://bsky.app/profile/ameliasvg.bsky.social) - Pour la création de notre logo et de notre identité visuelle.
+- [rei.svg](https://github.com/reisvg) - Pour la création de notre logo et de notre identité visuelle.
 - [SuperRiderTH](https://github.com/SuperRiderTH) - Pour la création de notre vidéo de démarrage du mode jeu Steam.
 - [evlaV](https://gitlab.com/evlaV) - Pour avoir rendu le code de Valve disponible et pour être [cette personne](https://xkcd.com/2347/).
 - [ChimeraOS](https://chimeraos.org/) - Pour gamescope-session et pour un soutien précieux tout au long du projet.
@@ -306,7 +308,7 @@ Bazzite est un effort communautaire et ne serait pas possible sans le soutien de
 
 Bazzite est entièrement construit sur GitHub et créer votre propre version personnalisée est aussi simple que de forker ce dépôt, ajouter une clé de signature privée et activer les actions GitHub.
 
-[Familiarisez-vous](https://docs.github.com/en/actions/security-guides/encrypted-secrets) sur la gestion des secrets dans GitHub. Vous devrez [générer une nouvelle paire de clés](https://docs.sigstore.dev/cosign/signing/overview/) avec cosign. La clé publique peut être dans votre repo public <sub><sup>(Vos utilisateurs en ont besoin pour vérifier les signatures)</sup></sub>, et vous pouvez coller la clé privée dans `Paramètres -> Secrets -> Actions` avec le nom `SIGNING_SECRET`.
+[Familiarisez-vous](https://docs.github.com/en/actions/security-guides/encrypted-secrets) sur la gestion des secrets dans GitHub. Vous devrez [générer une nouvelle paire de clés](https://docs.sigstore.dev/cosign/overview/) avec cosign. La clé publique peut être dans votre repo public <sub><sup>(Vos utilisateurs en ont besoin pour vérifier les signatures)</sup></sub>, et vous pouvez coller la clé privée dans `Paramètres -> Secrets -> Actions` avec le nom `SIGNING_SECRET`.
 
 Nous expédions également une configuration pour l'application populaire [pull app](https://github.com/apps/pull) si vous souhaitez synchroniser votre fork avec l'original. Activez cette application sur votre repo pour suivre les modifications de Bazzite tout en apportant vos propres modifications.
 

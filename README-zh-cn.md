@@ -28,8 +28,8 @@
   - [文档 \& 时事通讯](#文档--时事通讯)
   - [验证](#验证)
   - [安全启动](#安全启动)
-  - [贡献者指标](#贡献者指标)
-  - [Star History](#star-history)
+    - [贡献者指标](#贡献者指标)
+      - [Star History](#star-history)
   - [特别鸣谢](#特别鸣谢)
   - [构建自己的版本](#构建自己的版本)
   - [加入社区](#加入社区)
@@ -54,9 +54,10 @@ Bazzite是使用[Fedora](https://fedoraproject.org/)技术基于[ublue-os/main](
 - 可选的 Valve-inspired GTK3/4 主题对应 SteamOS的Vapor and VGUI2。安装 [Gradience](https://flathub.org/apps/com.github.GradienceTeam.Gradience) 以启用它们。
 - [LatencyFleX](https://github.com/ishitatsuyuki/LatencyFleX)， [vkBasalt](https://github.com/DadSchoorse/vkBasalt)， [MangoHud](https://github.com/flightlessmango/Mangohud)，和 [OBS VkCapture](https://github.com/nowrep/obs-vkcapture) 默认安装并可用。
 - [Patched Switcheroo-Control](https://copr.fedorainfracloud.org/coprs/sentry/switcheroo-control_discrete/) 修复了默认损坏的iGPU/dGPU开关。
+- 支持 [Wallpaper Engine](https://www.wallpaperengine.io/en)。 <sub><sup>(仅限KDE)</sup></sub>
 - 包含[ROM Properties Page shell extension](https://github.com/GerbilSoft/rom-properties) 。
 - 完全支持 [Winesync/Fastsync/NTsync](https://github.com/Frogging-Family/wine-tkg-git/issues/936).
-- 预装[Distrobox](https://github.com/89luca89/distrobox) 。
+- 预装[Distrobox](https://github.com/89luca89/distrobox) 并添加了已创建容器的自动更新。
 - [Ptyxis](https://gitlab.gnome.org/chergert/ptyxis) 用作所有镜像的默认终端。此终端专为你将在Bazzite中使用的容器工作流设计。如果你想切换回原始终端，请运行 `ujust _restore-original-terminal` 。
 - `duperemove`服务进程用于减少wine前缀内容所占用的磁盘空间。
 - 通过[libCEC](https://libcec.pulse-eight.com/)支持HDMI CEC。
@@ -79,7 +80,7 @@ Bazzite是使用[Fedora](https://fedoraproject.org/)技术基于[ublue-os/main](
 
 `bazzite`适用于台式计算机的通用变体。
 
-- 操作系统，Flatpaks，等的自动更新 - 由[ublue-update](https://github.com/ublue-os/ublue-update) 和 [topgrade](https://github.com/topgrade-rs/topgrade)提供支持。
+- 操作系统，Flatpaks，和所有Distrobox容器的自动更新 - 由[ublue-update](https://github.com/ublue-os/ublue-update) 和 [topgrade](https://github.com/topgrade-rs/topgrade)提供支持。
 
 > [!重要]
 > **ISOs可以从我们的[发布页面](https://github.com/ublue-os/bazzite/releases)下载，也可以[在此处](https://universal-blue.discourse.group/docs?topic=30)找到有用的安装指南。**
@@ -116,17 +117,18 @@ rpm-ostree rebase ostree-unverified-registry:ghcr.io/ublue-os/bazzite-nvidia:sta
 - 自带[SteamOS BTRFS](https://gitlab.com/popsulfr/steamos-btrfs)补丁以默认对SD card提供完整的BTRFS支持。
 - 附带[SDGyroDSU](https://github.com/kmicki/SteamDeckGyroDSU)的移植副本，默认启用。
 - 可选则安装[Decky Loader](https://github.com/SteamDeckHomebrew/decky-loader)，[EmuDeck](https://www.emudeck.com/)，[RetroDECK](https://retrodeck.net/)，和[ProtonUp-Qt](https://davidotek.github.io/protonup-qt/)，以及其他许多有用的软件包。
-- 自定义更新系统允许从由[ublue-update](https://github.com/ublue-os/ublue-update) 和 [topgrade](https://github.com/topgrade-rs/topgrade)提供支持的游戏模式直接更新操作系统、Flatpaks、等。
+- 自定义更新系统允许从由[ublue-update](https://github.com/ublue-os/ublue-update) 和 [topgrade](https://github.com/topgrade-rs/topgrade)提供支持的游戏模式直接更新操作系统、Flatpaks、和Distrobox镜像。
 - 内置对Windows双系统的支持，这要归功于Fedora的安装保持了GRUB的完整性。
 - 更新破坏了一些东西？借助于`rpm-ostree`的回滚功能，你可以轻松回滚到先前版本的Bazzite。你甚至可以在启动时选定先前版本的镜像。
 - Steam and Lutris作为分层包预装在镜像上。
 - 为Discord预装了[Discover Overlay](https://github.com/trigg/Discover)，如果Discord已经安装，则会在游戏模式和桌面模式自动启动。[在此查看官方文档](https://trigg.github.io/Discover/bazzite)。
-- 默认情况下将使用ZRAM<sub><sup>(4GB)</sup></sub> 及LZ4压缩算法。
+- 默认情况下将使用ZRAM<sub><sup>(4GB)</sup></sub> 及ZSTD压缩算法。可以选择切换回1GB交换文件，然后根据需要自定义其大小。
 - Kyber I/O 调度程序用来防止安装游戏或后台运行`duperemove`进程时出现I/O starvation。
 - 应用SteamOS的内核参数。
 - 包括用于磨砂和镜面Steam Deck屏幕的颜色校准显示配置文件。
 - 默认禁用的高级用户功能，包括：
     - 通过[RyzenAdj](https://github.com/FlyGoat/RyzenAdj) 和 [Ryzen SMU](https://gitlab.com/leogx9r/ryzen_smu)提供的Steam Deck的低风险欠压服务进程，参阅`ryzenadj.service` 和 `/etc/default/ryzenadj`。
+    - 限制电池最大充电水平的服务进程，参阅`batterylimit.service` 和 `/etc/default/batterylimit`。<sup><sub>(即使设备关闭也能工作)</sub></sup>
     - 内置超频显示支持。例如添加`GAMESCOPE_OVERRIDE_REFRESH_RATE=40,70` 到 `/etc/environment`。
     - 你的Steam Deck改了32GB内存？享受双倍最大显存，自动启用。<sup><sub>(可以分享你的焊接技巧吗？)</sub></sup>
 - Steam Deck硬件特定的服务可以通过在终端中运行`ujust disable-bios-updates` 和 `ujust disable-firmware-updates` 以禁用。这些服务在非Deck硬件、改装了DeckHD显示屏或改装了32GB内存的Deck上自动禁用。
@@ -245,7 +247,7 @@ Bazzite带来最新的Linux内核，默认启用的SELinux为安全启动提供�
 
 ## 验证
 
-这些镜像使用sigstore的[cosign](https://docs.sigstore.dev/cosign/signing/overview/)。你可以通过此存储库下载 `cosign.pub`密钥，并运行以下命令来验证签名：
+这些镜像使用sigstore的[cosign](https://docs.sigstore.dev/cosign/overview/)。你可以通过此存储库下载 `cosign.pub`密钥，并运行以下命令来验证签名：
 
 ```bash
 cosign verify --key cosign.pub ghcr.io/ublue-os/bazzite
@@ -268,11 +270,11 @@ sudo mokutil --import secure_boot.der
 
 如果要求输入密码，就使用`universalblue`。
 
-## 贡献者指标
+### 贡献者指标
 
 ![Bazzite](https://repobeats.axiom.co/api/embed/86b500d79c613015ad16f56df76c8e13f3fd98ae.svg "Repobeats analytics image")
 
-## Star History
+#### Star History
 
 <a href="https://star-history.com/#ublue-os/bazzite&Date">
   <picture>
@@ -286,7 +288,7 @@ sudo mokutil --import secure_boot.der
 
 Bazzite是社区努力的结果，离不开每个人的支持。以下是那些一路帮助过我们的人：
 
-- [amelia.svg](https://bsky.app/profile/ameliasvg.bsky.social) - 创作了我们的徽标和整体品牌。
+- [rei.svg](https://github.com/reisvg) - 创作了我们的徽标和整体品牌。
 - [SuperRiderTH](https://github.com/SuperRiderTH) - 创作了我们Steam游戏模式的启动视频。
 - [evlaV](https://gitlab.com/evlaV) - 使Valve的代码可用并成为[this person](https://xkcd.com/2347/).
 - [ChimeraOS](https://chimeraos.org/) - For gamescope-session and for valuable support along the way.
@@ -300,7 +302,7 @@ Bazzite是社区努力的结果，离不开每个人的支持。以下是那些�
 
 Bazzite完全在GitHub上构建，创建你自己的版本只需要fork此仓库，添加私钥，然后启用GitHub actions。
 
-熟悉github[加密机制](https://docs.github.com/en/actions/security-guides/encrypted-secrets)。你需要[生成带有cosign的新密钥对](https://docs.sigstore.dev/cosign/signing/overview/)。公钥可以放置在你的公有仓库中<sub><sup>(你的用户需要用它来检查签名)</sup></sub>，你可以用`SIGNING_SECRET`作为名字把私钥粘贴到`Settings -> Secrets -> Actions`。
+熟悉github[加密机制](https://docs.github.com/en/actions/security-guides/encrypted-secrets)。你需要[生成带有cosign的新密钥对](https://docs.sigstore.dev/cosign/overview/)。公钥可以放置在你的公有仓库中<sub><sup>(你的用户需要用它来检查签名)</sup></sub>，你可以用`SIGNING_SECRET`作为名字把私钥粘贴到`Settings -> Secrets -> Actions`。
 
 如果你想使你的fork与上游保持同步，我们同样提供了一个流行的[pull app](https://github.com/apps/pull)的设置。在你的仓库上启用此应用程序以追踪Bazzite的更新，同时进行你自己的修改。
 

@@ -5,11 +5,9 @@ Summary:        Portions of steamdeck-kde-presets reconfigured for use in GNOME
 License:        GPLv2
 URL:            https://github.com/ublue-os/bazzite
 
-Source0:        steamos-add-to-steam
-Source1:        steamos-add-to-steam.py
-
+VCS:            {{{ git_dir_vcs }}}
+Source:         {{{ git_dir_pack }}}
 BuildArch:      noarch
-BuildRequires:  coreutils
 
 Requires:       steamdeck-backgrounds
 Requires:       dbus-x11
@@ -19,24 +17,28 @@ Requires:       nautilus-python
 Conflicts:      steamdeck-kde-presets
 Conflicts:      steamdeck-kde-presets-desktop
 
-# Disable automatic debuginfo subpackage
-%global debug_package %{nil}
-
 %description
-This package provides GNOME desktop presets and integration for the Steam Deck,
-adapted from the steamdeck-kde-presets package. It includes utilities and
-Nautilus extensions for adding SteamOS-style behavior to GNOME.
+Portions of steamdeck-kde-presets reconfigured for use in GNOME
+
+# Disable debug packages
+%define debug_package %{nil}
 
 %prep
-# Nothing to prep
+{{{ git_dir_setup_macro }}}
 
 %install
-install -Dpm0755 %{SOURCE0} %{buildroot}%{_bindir}/steamos-add-to-steam
-install -Dpm0644 %{SOURCE1} %{buildroot}%{_datadir}/nautilus-python/extensions/steamos-add-to-steam.py
+mkdir -p %{buildroot}%{_datadir}/
+mkdir -p %{buildroot}%{_bindir}/
+cp -rv usr/share/* %{buildroot}%{_datadir}
+cp -rv usr/bin/* %{buildroot}%{_bindir}
 
+# This lists all the files that are included in the rpm package and that
+# are going to be installed into target system where the rpm is installed.
 %files
 %{_bindir}/steamos-add-to-steam
 %{_datadir}/nautilus-python/extensions/steamos-add-to-steam.py
 
+# Finally, changes from the latest release of your application are generated from
+# your project's Git history. It will be empty until you make first annotated Git tag.
 %changelog
 {{{ git_dir_changelog }}}

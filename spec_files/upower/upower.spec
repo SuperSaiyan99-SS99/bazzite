@@ -1,14 +1,10 @@
-%global _default_patch_fuzz 2
-
 Summary:        Power Management Service
 Name:           upower
-Version:        1.90.10
-Release:        1000.bazzite.{{{ git_dir_version }}}
+Version:        1.90.9
+Release:        %autorelease.bazzite.{{{ git_dir_version }}}
 License:        GPL-2.0-or-later
-URL:            https://upower.freedesktop.org/
+URL:            http://upower.freedesktop.org/
 Source0:        https://gitlab.freedesktop.org/upower/%{name}/-/archive/v%{version}/%{name}-v%{version}.tar.bz2
-
-Patch0:         valve.patch
 
 BuildRequires:  meson
 BuildRequires:  git
@@ -29,6 +25,8 @@ BuildRequires:  systemd
 
 Requires:       %{name}-libs%{?_isa} = %{version}-%{release}
 Requires:       udev
+
+Patch0:         valve.patch
 
 %description
 UPower (formerly DeviceKit-power) provides a daemon, API and command
@@ -58,13 +56,6 @@ BuildArch: noarch
 %description devel-docs
 Developer documentation for for libupower-glib.
 
-%package tests
-Summary: Test files for Upower
-Requires: %{name}%{?_isa} = %{version}-%{release}
-
-%description tests
-Test files for Upower
-
 %prep
 %autosetup -n %{name}-v%{version} -p1 -S git
 
@@ -79,9 +70,6 @@ Test files for Upower
 
 %install
 %meson_install
-
-mkdir -p $RPM_BUILD_ROOT%{_libexecdir}/installed-tests
-mv $RPM_BUILD_ROOT%{_libexecdir}/upower $RPM_BUILD_ROOT%{_libexecdir}/installed-tests
 
 %find_lang upower
 
@@ -107,14 +95,15 @@ mv $RPM_BUILD_ROOT%{_libexecdir}/upower $RPM_BUILD_ROOT%{_libexecdir}/installed-
 %dir %{_sysconfdir}/UPower
 %config %{_sysconfdir}/UPower/UPower.conf
 %{_bindir}/*
-%{_libexecdir}/upowerd
+%{_libexecdir}/*
 %{_mandir}/man1/*
 %{_mandir}/man7/*
 %{_mandir}/man8/*
 %{_datadir}/dbus-1/system-services/*.service
 %{_unitdir}/*.service
+%{_datadir}/installed-tests/upower/upower-integration.test
 %{_datadir}/polkit-1/actions/org.freedesktop.upower.policy
-%{_datadir}/zsh/*
+%{_datadir}/zsh
 
 %files libs
 %license COPYING
@@ -134,12 +123,6 @@ mv $RPM_BUILD_ROOT%{_libexecdir}/upower $RPM_BUILD_ROOT%{_libexecdir}/installed-
 %dir %{_datadir}/gtk-doc
 %dir %{_datadir}/gtk-doc/html/UPower
 %{_datadir}/gtk-doc/html/UPower/*
-
-%files tests
-%{_libexecdir}/installed-tests/upower
-%dir %{_datadir}/installed-tests/
-%dir %{_datadir}/installed-tests/upower/
-%{_datadir}/installed-tests/upower/upower-integration.test
 
 %changelog
 %autochangelog

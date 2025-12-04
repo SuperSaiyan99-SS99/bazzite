@@ -14,7 +14,6 @@ _install-system-flatpaks:
     flatpak --system -y install --reinstall --or-update ${FLATPAK_LIST}
 
 # Toggle SSH availability on boot
-[group("network")]
 toggle-ssh ACTION="":
     #!/usr/bin/bash
     source /usr/lib/ujust/ujust.sh
@@ -68,7 +67,6 @@ toggle-ssh ACTION="":
     esac
 
 # Regenerate GRUB config, useful in dual-boot scenarios where a second operating system isn't listed
-[group("system")]
 regenerate-grub:
     #!/usr/bin/bash
     source /usr/libexec/bazzite-boot-remount
@@ -81,7 +79,6 @@ regenerate-grub:
     remount_boot_ro
 
 # Configure grub bootmenu visibility. pass action 'help' for more info.
-[group("system")]
 configure-grub ACTION="":
     #!/usr/bin/bash
     source /usr/libexec/bazzite-boot-remount
@@ -193,7 +190,6 @@ configure-grub ACTION="":
     fi
 
 # Add user to "input" group required by certain controller drivers
-[group("hardware")]
 add-user-to-input-group:
     #!/usr/bin/bash
     if ! grep -q "input" /etc/group; then
@@ -202,71 +198,40 @@ add-user-to-input-group:
     sudo usermod -a -G input $USER
 
 # Enables automounting of labeled BTRFS/EXT4 partitions under /run/media/system
-[group("automounting")]
 enable-automounting:
-    #!/usr/bin/pkexec /usr/bin/bash
+    #!/usr/bin/bash
     set -eo pipefail
-    rm -f /etc/udev/rules.d/99-media-automount.rules # DELETEME
+    rule=/etc/udev/rules.d/99-media-automount.rules
+    if [[ "$(readlink $rule || :)" == /dev/null ]]; then
+        sudo -A rm -f $rule
+    fi
     if systemctl status --no-pager ublue-os-media-automount.service >/dev/null 2>&1; then
-        systemctl enable --now ublue-os-media-automount.service
+        sudo -A systemctl enable --now ublue-os-media-automount.service
     fi
 
 # Disables automounting of labeled BTRFS/EXT4 partitions under /run/media/system
-[group("automounting")]
 disable-automounting:
-    #!/usr/bin/pkexec /usr/bin/bash
+    #!/usr/bin/bash
     set -eo pipefail
-    rm -f /etc/udev/rules.d/99-media-automount.rules # DELETEME
+    rule=/etc/udev/rules.d/99-media-automount.rules
+    sudo ln -sf /dev/null $rule
     if systemctl status --no-pager ublue-os-media-automount.service >/dev/null 2>&1; then
-        systemctl disable ublue-os-media-automount.service
+        sudo -A systemctl disable ublue-os-media-automount.service
     fi
 
-# Enable framework automounting udev rules.
-[group("automounting")]
-enable-framework-automount:
-    #!/usr/bin/pkexec /usr/bin/bash
-    set -eo pipefail
-    rm -f /etc/udev/rules.d/99-framework-steam-automount.rules
-
-# Disable framework automounting udev rules.
-[group("automounting")]
-disable-framework-automount:
-    #!/usr/bin/pkexec /usr/bin/bash
-    set -eo pipefail
-    ln -sf /dev/null /etc/udev/rules.d/99-framework-steam-automount.rules
-
-# Disable SteamOS automount, this fixes ntfs partitions getting mounted.
-[group("automounting")]
-disable-steamos-automount:
-    @pkexec ln -sf /dev/null /etc/udev/rules.d/99-steamos-automount.rules
-
-# Enable SteamOS automount.
-[group("automounting")]
-enable-steamos-automount:
-    @pkexec rm -f /etc/udev/rules.d/99-steamos-automount.rules
-
-# Disable all partition automounting. This might increase boot times.
-[group("automounting")]
-disable-automount-all:
-    @pkexec --keep-cwd ujust disable-framework-automount disable-automounting disable-steamos-automount
-
-# Enable all automounting.
-[group("automounting")]
-enable-automount-all:
-    @pkexec --keep-cwd ujust enable-framework-automount enable-automounting enable-steamos-automount
+# Enable support for DisplayLink
+enable-displaylink:
+    systemctl enable --now displaylink.service
 
 # Enable support for Tailscale
-[group("network")]
 enable-tailscale:
     systemctl enable --now tailscaled.service
 
 # Enable Framework Fan Control
-[group("hardware")]
 enable-framework-fan-control:
     systemctl enable --now fw-fanctrl.service
 
 # Configure watchdog (default: enabled, recovers the system in the event of a malfunction)
-[group("system")]
 configure-watchdog ACTION="":
     #!/usr/bin/bash
     source /usr/lib/ujust/ujust.sh
@@ -309,8 +274,50 @@ configure-watchdog ACTION="":
       rpm-ostree kargs $WATCHDOG_KARGS
     fi
 
+# Install and configure Decky Loader (https://github.com/SteamDeckHomebrew/decky-loader) and plugins for alternative handhelds
+setup-decky ACTION="install":
+    #!/usr/bin/bash
+    if [[ $(id -u) -eq 0 ]]; then
+        echo >&2 "ERROR: Do not run this with sudo"
+        exit 1
+    fi
+    source /usr/lib/ujust/ujust.sh
+    DECKY_STATE="${b}${red}Not Installed${n}"
+    if [[ -d $HOME/homebrew/plugins ]]; then
+      DECKY_STATE="${b}${green}Installed${n}"
+    fi
+    OPTION={{ ACTION }}
+    if [ "$OPTION" == "help" ]; then
+      echo "Usage: ujust setup-decky <option>"
+      echo "  <option>: Specify the quick option to skip the prompt"
+      echo "  Use 'install' to select Install Decky"
+      echo "  Use 'prerelease' to select Install Decky Prerelease"
+      exit 0
+    fi
+    if [[ "${OPTION,,}" =~ install ]]; then
+      export HOME=$(getent passwd ${SUDO_USER:-$USER} | cut -d: -f6)
+      if [ ! -L "/home/deck" ] && [ ! -e "/home/deck" ]  && [ "$HOME" != "/home/deck" ]; then
+        echo "Making a /home/deck symlink to fix plugins that do not use environment variables."
+        sudo -A ln -sf "$HOME" /home/deck
+      fi
+      if [[ -d ~/homebrew ]]; then
+        sudo -A chown -R --reference ~/ ~/homebrew
+      fi
+      curl -L https://github.com/SteamDeckHomebrew/decky-installer/releases/latest/download/install_release.sh |
+        sed 's|sudo|sudo -A |g' | sh
+      sudo -A chcon -R -t bin_t $HOME/homebrew/services/PluginLoader
+    fi
+    if [[ "${OPTION,,}" =~ prerelease ]]; then
+      export HOME=$(getent passwd ${SUDO_USER:-$USER} | cut -d: -f6)
+      if [ ! -L "/home/deck" ] && [ ! -e "/home/deck" ]  && [ "$HOME" != "/home/deck" ]; then
+        echo "Making a /home/deck symlink to fix plugins that do not use environment variables."
+        sudo -A ln -sf "$HOME" /home/deck
+      fi
+      curl -L https://github.com/SteamDeckHomebrew/decky-installer/releases/latest/download/install_prerelease.sh | sh
+      sudo -A chcon -R -t bin_t $HOME/homebrew/services/PluginLoader
+    fi
+
 # Ptyxis terminal transparency
-[group("utilities")]
 ptyxis-transparency opacity="0.95":
     #!/usr/bin/bash
     set -euxo pipefail
@@ -328,7 +335,6 @@ ptyxis-transparency opacity="0.95":
     fi
 
 # Configure snapshotting for /var/home
-[group("system")]
 configure-snapshots ACTION="":
     #!/usr/bin/bash
     source /usr/lib/ujust/ujust.sh
@@ -352,8 +358,7 @@ configure-snapshots ACTION="":
       /usr/libexec/bazzite-snapper-config wipe
     fi
 
-# Enable a Bluefin-style CLI experience
-[group("development")]
+# Bazzite CLI mod for bluefin style cli-bing (modfied copy of https://github.com/ublue-os/bluefin/blob/faf7303afa6f8d6e747940c1d1ba63c6d2d43c80/system_files/shared/usr/libexec/ublue-bling.sh#L62)
 bazzite-cli:
     #!/usr/bin/bash
     #shellcheck disable=SC2154
@@ -526,13 +531,11 @@ bazzite-cli:
     main ""
 
 # Run a one minute system benchmark
-[group("utilities")]
 benchmark:
     echo 'Running a 1 minute benchmark ...'
     cd /tmp && stress-ng --matrix 0 -t 1m --times
 
 # toggles password prompt feedback in terminal, where sudo password prompts will display asterisks when enabled
-[group("development")]
 toggle-password-feedback ACTION="":
     #!/usr/bin/bash
     PWFEEDBACK_FILE="/etc/sudoers.d/enable-pwfeedback"
@@ -551,8 +554,86 @@ toggle-password-feedback ACTION="":
       echo "enabled, restart terminal to see changes"
     fi
 
+# Install Bazzite Buddy plugin to easily access changelogs in game mode!
+get-decky-bazzite-buddy:
+    #!/bin/bash
+    REPO_OWNER="xXJSONDeruloXx"
+    REPO_NAME="bazzite-buddy"
+    PLUGIN_NAME="bazzite-buddy"
+    PLUGIN_DIR="$HOME/homebrew/plugins"
+    # Get the latest release information
+    echo "Fetching latest release information..."
+    RELEASE_INFO=$(curl -s "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest")
+    # Extract the download URL for the zip file
+    DOWNLOAD_URLS=$(echo "$RELEASE_INFO" | grep -o '"browser_download_url": "[^"]*\.zip"' | cut -d'"' -f4)
+    # Check if any zip files were found
+    if [ -z "$DOWNLOAD_URLS" ]; then
+      echo "No zip files found in the latest release. Falling back to stable URL..."
+      PLUGIN_URL="https://github.com/$REPO_OWNER/$REPO_NAME/releases/download/stable/bazzite-buddy.zip"
+    else
+      # Pick the first zip file (usually there's only one)
+      PLUGIN_URL=$(echo "$DOWNLOAD_URLS" | head -n 1)
+      echo "Found latest release: $PLUGIN_URL"
+    fi
+    if [ ! -d "$PLUGIN_DIR" ]; then
+      echo "Creating plugins directory with sudo..."
+      sudo mkdir -p "$PLUGIN_DIR"
+    fi
+    # Change to the plugin directory
+    cd "$PLUGIN_DIR" || { echo "Failed to navigate to plugins directory"; exit 1; }
+    # Remove any existing plugin folder
+    if [ -d "$PLUGIN_NAME" ]; then
+      echo "Removing existing $PLUGIN_NAME directory with sudo..."
+      sudo rm -rf "$PLUGIN_NAME"
+    fi
+    # Download the zip file
+    echo "Downloading plugin from $PLUGIN_URL..."
+    TEMP_ZIP="temp_plugin.zip"
+    sudo curl -L -o "$TEMP_ZIP" "$PLUGIN_URL"
+    if [ $? -ne 0 ]; then
+      echo "Download failed!"
+      exit 1
+    fi
+    echo "Extracting plugin..."
+    sudo unzip -o "$TEMP_ZIP" -d .
+    if [ $? -ne 0 ]; then
+      echo "Extraction failed!"
+      exit 1
+    fi
+    # Handle different extracted folder names
+    # Look for any extracted folders that might contain the plugin
+    EXTRACTED_FOLDERS=$(find . -maxdepth 1 -type d -name "bazzite*" -o -name "Bazzite*" | grep -v "^\./$")
+    # If we found a folder but it's not the expected name
+    if [ -n "$EXTRACTED_FOLDERS" ] && [ ! -d "./$PLUGIN_NAME" ]; then
+      FOUND_FOLDER=$(echo "$EXTRACTED_FOLDERS" | head -n 1)
+      echo "Found plugin folder with different name: $FOUND_FOLDER"
+      echo "Renaming to $PLUGIN_NAME..."
+      sudo mv "$FOUND_FOLDER" "./$PLUGIN_NAME"
+    fi
+    # Handle nested folders structure if needed
+    if [ -d "./${PLUGIN_NAME}/${PLUGIN_NAME}" ]; then
+      echo "Fixing nested folder structure..."
+      sudo mv ./${PLUGIN_NAME}/${PLUGIN_NAME}/* ./${PLUGIN_NAME}/
+      sudo rm -rf ./${PLUGIN_NAME}/${PLUGIN_NAME}
+    fi
+    # Check if we have a plugin with capital letters
+    if [ ! -d "./$PLUGIN_NAME" ] && [ -d "./Bazzite.Buddy" ]; then
+      echo "Found Bazzite.Buddy folder, renaming to $PLUGIN_NAME..."
+      sudo mv "./Bazzite.Buddy" "./$PLUGIN_NAME"
+    fi
+    # Clean up the downloaded ZIP file
+    echo "Cleaning up..."
+    sudo rm -f "$TEMP_ZIP"
+    # Confirm installation
+    if [ -d "./$PLUGIN_NAME" ]; then
+      echo "$PLUGIN_NAME has been installed successfully to $PLUGIN_DIR!"
+      echo "Please restart Decky Loader to activate the plugin."
+    else
+      echo "Installation may have failed. Please check if the plugin is installed correctly."
+      echo "Plugin folder could not be found as expected."
+    fi
+
 # Toggle whether Steam launches with the -steamdeck flag, which causes Big Picture / Game Mode to emulate Steam Deck behavior. Disabling this can prevent games from forcing Steam Deck-specific assets, such as lower-resolution textures.
-[group("gaming")]
 _toggle-steamdeck-alias:
     #!/usr/bin/bash
     # Toggles whether Steam presents the system as a Steam Deck via -steamdeck
@@ -602,16 +683,10 @@ _toggle-steamdeck-alias:
     esac
 
 # get logs for this boot and last boot, cleanly output in terminal as pastebin links, to simplify troubleshooting and issue reporting.
-[group("utilities")]
 get-logs:
     #!/bin/bash
     set -euo pipefail
     source /usr/lib/ujust/ujust.sh
-    # Get system status information
-    echo -e "${bold}System Information:${normal}"
-    echo " "
-    rpm-ostree status
-    echo " "
     # Get logs for this boot
     this_boot_logs=$(journalctl -b | fpaste 2>/dev/null)
     echo -e "${bold}Logs This Boot:${normal} $this_boot_logs"
@@ -620,13 +695,3 @@ get-logs:
     last_boot_logs=$(journalctl -b -1 | fpaste 2>/dev/null)
     echo -e "${bold}Logs Last Boot:${normal} $last_boot_logs"
     echo " "
-    # Concatenate all outputs and copy to clipboard
-    {
-      echo "System Information:"
-      rpm-ostree status
-      echo
-      echo "Logs This Boot: $this_boot_logs"
-      echo
-      echo "Logs Last Boot: $last_boot_logs"
-    } | wl-copy
-    echo -e "${green}All output has been copied to your clipboard.${normal}"
